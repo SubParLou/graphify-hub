@@ -21,6 +21,21 @@ GLOBAL_GRAPH = HOME_DIR / ".graphify" / "global-graph.json"
 
 API_KEY = os.environ.get("HUB_API_KEY", "").strip()
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "").strip()
+# Fine-grained tokens cover one owner each. GITHUB_TOKEN_<OWNER> (owner upper-cased,
+# '-' as '_') is used for that owner's repos; GITHUB_TOKEN for everything else.
+OWNER_TOKENS = {
+    k.removeprefix("GITHUB_TOKEN_").lower(): v.strip()
+    for k, v in os.environ.items()
+    if k.startswith("GITHUB_TOKEN_") and v.strip()
+}
+
+
+def token_for(owner: str) -> str:
+    return OWNER_TOKENS.get(owner.lower().replace("-", "_"), GITHUB_TOKEN)
+
+
+def all_tokens() -> list[str]:
+    return list(dict.fromkeys(t for t in [GITHUB_TOKEN, *OWNER_TOKENS.values()] if t))
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "").strip()
 
 HUB_PORT = _int("HUB_PORT", 8780)
@@ -40,7 +55,7 @@ def check() -> None:
     problems = []
     if len(API_KEY) < 16:
         problems.append("HUB_API_KEY must be set (16+ chars, e.g. `openssl rand -hex 32`)")
-    if not GITHUB_TOKEN:
+    if not all_tokens():
         print("[hub] warning: GITHUB_TOKEN not set; only public repos will clone, and the repo picker "
               "and PR tools are off", file=sys.stderr)
     if BUILD_MODE not in ("code-only", "full"):

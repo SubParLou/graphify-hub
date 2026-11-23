@@ -12,6 +12,7 @@ services:
     environment:
       HUB_API_KEY: "CHANGE ME: openssl rand -hex 32"
       GITHUB_TOKEN: "CHANGE ME: fine-grained PAT (Contents, Metadata, Pull requests: read)"
+      # GITHUB_TOKEN_MYORG: ""       # one fine-grained token per extra org
       WEBHOOK_SECRET: ""            # optional: set to enable /webhook/github
       SYNC_INTERVAL_MINUTES: "15"   # 0 = only webhook/manual syncs
       BUILD_MODE: "code-only"       # "full" also maps docs/PDFs (needs an LLM key below)

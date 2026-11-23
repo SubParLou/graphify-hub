@@ -88,6 +88,7 @@ scheduled sync.
 |---|---|---|
 | `HUB_API_KEY` | required | Dashboard login and MCP bearer token (16+ chars) |
 | `GITHUB_TOKEN` | – | Needed for private repos, the repo picker and PR tools |
+| `GITHUB_TOKEN_<OWNER>` | – | Token for one owner's repos, e.g. `GITHUB_TOKEN_PLAYPROPER`. Fine-grained tokens cover a single user or org, so add one per org. Owner upper-cased, `-` as `_`. PR tools use `GITHUB_TOKEN` |
 | `WEBHOOK_SECRET` | – | Enables `/webhook/github` |
 | `SYNC_INTERVAL_MINUTES` | `15` | Scheduled pull + rebuild-if-changed. `0` disables |
 | `BUILD_MODE` | `code-only` | `full` also maps docs/PDFs/images with an LLM (set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OPENAI_BASE_URL` + `OPENAI_MODEL` for Ollama) |

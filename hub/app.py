@@ -58,7 +58,7 @@ _gh_cache: dict = {"at": 0.0, "repos": [], "error": None}
 
 
 def _github_repos() -> tuple[list[dict], str | None]:
-    if not config.GITHUB_TOKEN:
+    if not config.all_tokens():
         return [], None
     if time.time() - _gh_cache["at"] > 300:
         try:

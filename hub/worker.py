@@ -33,30 +33,32 @@ def log(msg: str) -> None:
 
 # ── environment for child processes ──────────────────────────────────────────
 
-def _child_env() -> dict[str, str]:
+def _child_env(token: str | None = None) -> dict[str, str]:
+    if token is None:
+        token = config.GITHUB_TOKEN or next(iter(config.all_tokens()), "")
     env = dict(os.environ)
     env["HOME"] = str(config.HOME_DIR)
     env["GRAPHIFY_NO_CTA"] = "1"
     env["GRAPHIFY_QUERY_LOG"] = str(config.DATA_DIR / "hub" / "queries.log")
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["GH_CONFIG_DIR"] = str(config.HOME_DIR / ".config" / "gh")
-    if config.GITHUB_TOKEN:
-        env["GH_TOKEN"] = config.GITHUB_TOKEN
+    if token:
+        env["GH_TOKEN"] = token
         # Token goes to git as an HTTP header through env-only config, so it never
         # lands in argv (visible in ps) or in the clone's .git/config.
-        basic = base64.b64encode(f"x-access-token:{config.GITHUB_TOKEN}".encode()).decode()
+        basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
         env["GIT_CONFIG_COUNT"] = "1"
         env["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader"
         env["GIT_CONFIG_VALUE_0"] = f"AUTHORIZATION: basic {basic}"
     # The hub's own secrets are not the build's business.
-    for k in ("HUB_API_KEY", "WEBHOOK_SECRET", "GITHUB_TOKEN"):
-        env.pop(k, None)
+    for k in [k for k in env if k in ("HUB_API_KEY", "WEBHOOK_SECRET") or k.startswith("GITHUB_TOKEN")]:
+        env.pop(k)
     return env
 
 
-def _run(args: list[str], cwd: Path | None = None, timeout: int = 600) -> str:
+def _run(args: list[str], cwd: Path | None = None, timeout: int = 600, token: str | None = None) -> str:
     res = subprocess.run(
-        args, cwd=cwd, env=_child_env(), stdin=subprocess.DEVNULL,
+        args, cwd=cwd, env=_child_env(token), stdin=subprocess.DEVNULL,
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
     )
     if res.returncode != 0:
@@ -112,6 +114,7 @@ def _sync(full_name: str, force: bool) -> None:
     branch = repo["branch"]
     root = repo_root(full_name)
     src = root / "src"
+    token = config.token_for(full_name.split("/")[0])
     started = time.monotonic()
     store.update(full_name, status="syncing", error=None)
 
@@ -119,9 +122,9 @@ def _sync(full_name: str, force: bool) -> None:
         shutil.rmtree(src, ignore_errors=True)
         src.parent.mkdir(parents=True, exist_ok=True)
         _run(["git", "clone", "--depth", "1", "--single-branch", "--branch", branch,
-              f"https://github.com/{full_name}.git", str(src)], timeout=1800)
+              f"https://github.com/{full_name}.git", str(src)], timeout=1800, token=token)
     else:
-        _run(["git", "fetch", "--depth", "1", "origin", branch], cwd=src, timeout=1800)
+        _run(["git", "fetch", "--depth", "1", "origin", branch], cwd=src, timeout=1800, token=token)
         _run(["git", "reset", "--hard", "FETCH_HEAD"], cwd=src)
         _run(["git", "clean", "-fdq"], cwd=src)
     sha = _run(["git", "rev-parse", "HEAD"], cwd=src).strip()
@@ -252,21 +255,28 @@ def stop() -> None:
 # ── GitHub API (repo picker) ──────────────────────────────────────────────────
 
 def github_repos(max_pages: int = 5) -> list[dict]:
-    """Repos the token can see, most recently pushed first."""
-    out: list[dict] = []
-    for page in range(1, max_pages + 1):
-        req = urllib.request.Request(
-            f"https://api.github.com/user/repos?per_page=100&page={page}&sort=pushed"
-            "&affiliation=owner,collaborator,organization_member",
-            headers={"Authorization": f"Bearer {config.GITHUB_TOKEN}",
-                     "Accept": "application/vnd.github+json",
-                     "X-GitHub-Api-Version": "2022-11-28",
-                     "User-Agent": "graphify-hub"},
-        )
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            batch = json.loads(resp.read())
-        out += [{"full_name": r["full_name"], "default_branch": r.get("default_branch") or "main",
-                 "private": r.get("private", False)} for r in batch]
-        if len(batch) < 100:
-            break
-    return out
+    """Repos the configured tokens can see, most recently pushed first."""
+    out: dict[str, dict] = {}
+    for token in config.all_tokens():
+        for page in range(1, max_pages + 1):
+            req = urllib.request.Request(
+                f"https://api.github.com/user/repos?per_page=100&page={page}&sort=pushed"
+                "&affiliation=owner,collaborator,organization_member",
+                headers={"Authorization": f"Bearer {token}",
+                         "Accept": "application/vnd.github+json",
+                         "X-GitHub-Api-Version": "2022-11-28",
+                         "User-Agent": "graphify-hub"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    batch = json.loads(resp.read())
+            except Exception as e:  # one bad token shouldn't hide the others' repos
+                log(f"repo list failed for a token: {e}")
+                break
+            for r in batch:
+                out.setdefault(r["full_name"], {"full_name": r["full_name"],
+                                                "default_branch": r.get("default_branch") or "main",
+                                                "private": r.get("private", False)})
+            if len(batch) < 100:
+                break
+    return list(out.values())
