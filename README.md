@@ -49,8 +49,8 @@ Don't forward 8780/8781 to the internet: the hub key is the only auth, and traff
 
 ### Image visibility
 
-The workflow publishes `ghcr.io/subparlou/graphify-hub`. GHCR packages start private. Either make the
-package public (GitHub → Packages → graphify-hub → Package settings → Change visibility) or log TrueNAS into
+The workflow publishes `ghcr.io/subparlou/graphify-hub` (amd64 + arm64). The package inherits the repo's
+public visibility, so TrueNAS pulls it without logging in. If the repo is ever made private, log TrueNAS into
 `ghcr.io` with a token that has `read:packages`.
 
 ## Connect your agents
