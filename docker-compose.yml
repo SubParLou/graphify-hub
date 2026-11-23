@@ -1,0 +1,20 @@
+# TrueNAS SCALE 24.10+: Apps → Discover Apps → ⋮ → Install via YAML, paste this,
+# and replace the values marked CHANGE ME.
+services:
+  graphify-hub:
+    image: ghcr.io/subparlou/graphify-hub:latest
+    container_name: graphify-hub
+    restart: unless-stopped
+    user: "568:568"
+    ports:
+      - "8780:8780"   # dashboard + GitHub webhook
+      - "8781:8781"   # MCP endpoint for your agents (/mcp)
+    environment:
+      HUB_API_KEY: "CHANGE ME: openssl rand -hex 32"
+      GITHUB_TOKEN: "CHANGE ME: fine-grained PAT (Contents, Metadata, Pull requests: read)"
+      WEBHOOK_SECRET: ""            # optional: set to enable /webhook/github
+      SYNC_INTERVAL_MINUTES: "15"   # 0 = only webhook/manual syncs
+      BUILD_MODE: "code-only"       # "full" also maps docs/PDFs (needs an LLM key below)
+      # ANTHROPIC_API_KEY: ""
+    volumes:
+      - /mnt/CHANGE_ME_POOL/apps/graphify-hub:/data
